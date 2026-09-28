@@ -31,12 +31,12 @@
   <worldbody>
     <light pos="0 -2 3" dir="0 1 -1" diffuse=".6 .6 .6"/>
     <geom name="floor" type="plane" pos="0 0 -0.2" size="6 6 0.1" material="grid"/>
-    <geom name="mount" type="box" pos="0 0 1" size="0.03 0.03 0.03" rgba=".55 .55 .75 1"/>
+    <geom name="mount" type="box" pos="0 0 0.6" size="0.03 0.03 0.03" rgba=".55 .55 .75 1"/>
 
-    <body name="arm" pos="0 0 1">
+    <body name="arm" pos="0 0 0.6">
       <joint name="hinge" type="hinge" axis="0 1 0" pos="0 0 0"/>
-      <geom name="rod" fromto="0 0 0 0 0 -0.5" mass="0.30" rgba="0 .72 .72 1"/>
-      <site name="tip" pos="0 0 -0.5" size="0.02"/>
+      <geom name="rod" fromto="0 0 0 0 0 -0.6" mass="0.30" rgba="0 .72 .72 1"/>
+      <site name="tip" pos="0 0 -0.6" size="0.02"/>
     </body>
   </worldbody>
 
