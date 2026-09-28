@@ -1,0 +1,54 @@
+<!--
+  小车 - 倒立摆 (cart inverted pendulum)
+
+  qpos = [cart_x, hinge]        qvel = [cart_vx, hinge_v]
+  nv = 2, nu = 1  -> 欠驱动(1 输入控 2 自由度)
+
+  平衡点: qpos = qvel = ctrl = 0  即"竖直直立"
+    关节位于杆件底端, 直立时重力力臂为 0, 所以 ctrl=0 就是精确平衡点.
+
+  自包含: 不依赖 dm_control / gymnasium 的 include 文件.
+-->
+<mujoco model="cart inverted pendulum">
+  <compiler angle="radian"/>
+  <option timestep="0.01" integrator="implicitfast" gravity="0 0 -9.81">
+    <flag energy="enable"/>
+  </option>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1=".18 .22 .28" rgb2=".26 .32 .40"/>
+    <material name="grid" texture="grid" texrepeat="4 4" texuniform="true" reflectance=".15"/>
+  </asset>
+
+  <default>
+    <!-- 无接触问题: 关闭碰撞, 保持线性化干净 -->
+    <geom contype="0" conaffinity="0" type="capsule" size="0.02"/>
+    <joint damping="0.01"/>
+  </default>
+
+  <worldbody>
+    <light pos="0 -2 3" dir="0 1 -1" diffuse=".6 .6 .6"/>
+    <geom name="floor" type="plane" pos="0 0 -0.2" size="6 6 0.1" material="grid"/>
+    <geom name="rail" fromto="-2.5 0 0 2.5 0 0" size="0.012" rgba=".55 .55 .75 1"/>
+
+    <body name="cart" pos="0 0 0">
+      <joint name="slider" type="slide" axis="1 0 0" damping="0.05" limited="true" range="-3 3"/>
+      <geom name="cart" type="box" size="0.09 0.06 0.06" mass="1.0" rgba=".28 .32 .72 1"/>
+
+      <body name="pole" pos="0 0 0">
+        <joint name="hinge" type="hinge" axis="0 1 0" pos="0 0 0"/>
+        <geom name="pole" fromto="0 0 0 0 0 0.5" mass="0.30" rgba=".95 .5 .05 1"/>
+        <site name="tip" pos="0 0 0.5" size="0.02"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="slide" joint="slider" gear="1" ctrllimited="true" ctrlrange="-20 20"/>
+  </actuator>
+
+  <keyframe>
+    <key name="upright" qpos="0 0" qvel="0 0" ctrl="0"/>
+  </keyframe>
+</mujoco>

@@ -1,0 +1,50 @@
+<!--
+  简单单摆 (simple pendulum)
+
+  qpos = [hinge]        qvel = [hinge_v]
+  nv = 1, nu = 1
+
+  约定: qpos = 0 是**竖直下垂**(稳定平衡点, 与倒立摆模型相反),
+  标准能量法/摆起练习都用这个约定.
+  固定铰点在 (0, 0, 1), 杆长 0.5, 摆尖最低点 z = 0.5.
+
+  执行器是铰关节上的力矩马达, 做自由摆动时让 ctrl=0 即可.
+  自包含: 不依赖 dm_control / gymnasium 的 include 文件.
+-->
+<mujoco model="simple pendulum">
+  <compiler angle="radian"/>
+  <option timestep="0.01" integrator="implicitfast" gravity="0 0 -9.81">
+    <flag energy="enable"/>
+  </option>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1=".18 .22 .28" rgb2=".26 .32 .40"/>
+    <material name="grid" texture="grid" texrepeat="4 4" texuniform="true" reflectance=".15"/>
+  </asset>
+
+  <default>
+    <geom contype="0" conaffinity="0" type="capsule" size="0.02"/>
+    <joint damping="0.01"/>
+  </default>
+
+  <worldbody>
+    <light pos="0 -2 3" dir="0 1 -1" diffuse=".6 .6 .6"/>
+    <geom name="floor" type="plane" pos="0 0 -0.2" size="6 6 0.1" material="grid"/>
+    <geom name="mount" type="box" pos="0 0 1" size="0.03 0.03 0.03" rgba=".55 .55 .75 1"/>
+
+    <body name="arm" pos="0 0 1">
+      <joint name="hinge" type="hinge" axis="0 1 0" pos="0 0 0"/>
+      <geom name="rod" fromto="0 0 0 0 0 -0.5" mass="0.30" rgba="0 .72 .72 1"/>
+      <site name="tip" pos="0 0 -0.5" size="0.02"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="torque" joint="hinge" gear="1" ctrllimited="true" ctrlrange="-5 5"/>
+  </actuator>
+
+  <keyframe>
+    <key name="down" qpos="0" qvel="0" ctrl="0"/>
+  </keyframe>
+</mujoco>
