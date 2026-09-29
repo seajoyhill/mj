@@ -40,7 +40,11 @@
 """
 
 import argparse
+import subprocess
+import sys
+import tempfile
 import time
+from pathlib import Path
 
 import mujoco
 import numpy as np
@@ -80,7 +84,7 @@ def to_arrays(log, th_ref=TH_REF):
     return t, th, err, u
 
 
-def plot(m, t, th, err, u):
+def plot(t, th, err, u, umax, timestep):
     """画图: 上面是当前角度 vs 目标角度, 中间是误差, 下面是控制量"""
 
     import matplotlib
@@ -89,9 +93,16 @@ def plot(m, t, th, err, u):
     # 默认字体没有中文, 不设会画成一堆方框
     matplotlib.rcParams["font.sans-serif"] = ["Noto Sans CJK JP", "Droid Sans Fallback",
                                               "WenQuanYi Micro Hei", "DejaVu Sans"]
+    if sys.platform == "darwin":
+        # macOS 专用: 优先使用苹果苹方；按系统实际提供的字族选择。
+        from matplotlib import font_manager
+        available_fonts = {font.name for font in font_manager.fontManager.ttflist}
+        for family in ("PingFang SC", "PingFang HK", "PingFang TC"):
+            if family in available_fonts:
+                matplotlib.rcParams["font.sans-serif"].insert(0, family)
+                break
     matplotlib.rcParams["axes.unicode_minus"] = False
 
-    umax = float(m.actuator_ctrlrange[0, 1])
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(9.5, 8.0))
 
     ax[0].plot(t, th, color="#1f77b4", lw=1.4, label="当前角度 theta")
@@ -102,7 +113,7 @@ def plot(m, t, th, err, u):
     ax[0].set_ylabel("角度 [rad]")
     ax[0].legend(loc="lower right", fontsize=9)
     ax[0].set_title("单摆 PD: 当前角度 vs 目标角度    Kp=%.0f  Kd=%.0f  dt=%.3f s"
-                    % (Kp_th, Kd_th, m.opt.timestep))
+                    % (Kp_th, Kd_th, timestep))
 
     ax[1].plot(t, err, color="#2ca02c", lw=1.4, label="误差 theta - theta_ref (折到 +-pi)")
     ax[1].axhline(0.0, color="k", lw=0.8)
@@ -123,13 +134,39 @@ def plot(m, t, th, err, u):
     fig.tight_layout()
 
 
+def show_plot(t, th, err, u, umax, timestep):
+    if sys.platform == "darwin":
+        # macOS 专用修复: mjpython 在工作线程运行脚本，Matplotlib 的 macosx
+        # 后端只能在系统主线程创建窗口。用普通 Python 子进程显示图表。
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plot_path = Path(tmpdir) / "pendulum_plot.npz"
+            np.savez(plot_path, t=t, th=th, err=err, u=u,
+                     umax=umax, timestep=timestep)
+            subprocess.run([sys.executable, str(Path(__file__).resolve()),
+                            "--_plot-data", str(plot_path)], check=True)
+        return
+
+    plot(t, th, err, u, umax, timestep)
+    import matplotlib.pyplot as plt
+    plt.show()
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--viewer", action="store_true", help="打开实时可视化")
     ap.add_argument("--plot", action="store_true", help="跑完后画曲线图 (角度/误差/力矩)")
     ap.add_argument("--seconds", type=float, default=20.0, help="仿真时长 [s]")
+    ap.add_argument("--_plot-data", help=argparse.SUPPRESS)
     args = ap.parse_args()
+
+    if args._plot_data is not None:
+        # macOS 专用修复: 此入口由普通 Python 子进程执行，窗口位于系统主线程。
+        with np.load(args._plot_data) as data:
+            plot(data["t"], data["th"], data["err"], data["u"],
+                 float(data["umax"]), float(data["timestep"]))
+        import matplotlib.pyplot as plt
+        plt.show()
+        return
 
     m = mujoco.MjModel.from_xml_path("model/pendulum.xml")
     d = mujoco.MjData(m)
@@ -167,9 +204,7 @@ def main():
           f"超出 +-{umax:g} 的时间占比 {100.0 * np.mean(np.abs(u) > umax):.1f}%")
 
     if args.plot:
-        plot(m, t, th, err, u)
-        import matplotlib.pyplot as plt
-        plt.show()
+        show_plot(t, th, err, u, umax, m.opt.timestep)
 
 
 
