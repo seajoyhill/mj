@@ -1,4 +1,4 @@
-"""仿真单摆的 PD 控制，并记录和绘制运行结果。
+"""仿真单摆的 PID 控制，并记录和绘制运行结果。
 
 模型与约定：
     使用 model/pendulum.xml，关节 hinge 的位置和速度分别为
@@ -6,9 +6,12 @@
     theta = pi 表示竖直向上。仿真从竖直下垂位置开始，目标角度为 TH_REF。
 
 控制律：
-    u = Kp_th * (TH_REF - theta) - Kd_th * theta_dot。
+    e = TH_REF - theta。
+    u = Kp_th * e + Ki_th * integral(e dt) - Kd_th * theta_dot。
+    积分项提供目标角度所需的持续力矩；控制量达到执行器限幅且误差
+    继续推动饱和时，暂停积分以防止积分饱和。
     d.ctrl[0] 保存未限幅的力矩命令；模型中的执行器将实际力矩限制在
-    [-5, 5] N·m，不会改写 d.ctrl[0]。控制器没有积分项。
+    [-5, 5] N·m，不会改写 d.ctrl[0]。
 
 运行与绘图：
     macOS：mjpython pend_pid_controller.py --viewer --plot
@@ -27,14 +30,26 @@ from pathlib import Path
 import mujoco
 import numpy as np
 
-Kp_th, Kd_th = 10.0, 1.0
-TH_REF = 3.14  # 目标角度，单位为弧度；3.14 约等于竖直向上的 pi。
+Kp_th, Ki_th, Kd_th = 20.0, 2.0, 1.0
+TH_REF = 1.57  # 目标角度，单位为弧度；1.57 约为水平位置。
 
 
-def policy(m, d, th_target=TH_REF):
-    """根据角度和角速度计算未限幅的力矩命令，并写入 d.ctrl[0]。"""
+def policy(m, d, integral_error, th_target=TH_REF):
+    """更新积分状态，并将未限幅的 PID 控制量写入 d.ctrl[0]。"""
 
-    d.ctrl[0] = Kd_th * (0.0 - d.qvel[0]) + Kp_th * ( th_target - d.qpos[0] )
+    error = th_target - d.qpos[0]
+    pd = Kp_th * error - Kd_th * d.qvel[0]
+    candidate = integral_error + error * m.opt.timestep
+    u_candidate = pd + Ki_th * candidate
+    u_min, u_max = m.actuator_ctrlrange[0]
+
+    # 执行器饱和且误差继续推向限幅时，暂停积分；反向误差仍可释放积分。
+    if not ((u_candidate > u_max and error > 0) or
+            (u_candidate < u_min and error < 0)):
+        integral_error = candidate
+
+    d.ctrl[0] = pd + Ki_th * integral_error
+    return integral_error
 
 
 def record(log, d):
@@ -93,8 +108,8 @@ def plot(t, th, err, u, umax, timestep):
     ax[0].set_ylim(TH_REF - span, TH_REF + span)
     ax[0].set_ylabel("角度 [rad]")
     ax[0].legend(loc="lower right", fontsize=9)
-    ax[0].set_title("单摆 PD: 当前角度 vs 目标角度    Kp=%.0f  Kd=%.0f  dt=%.3f s"
-                    % (Kp_th, Kd_th, timestep))
+    ax[0].set_title("单摆 PID: 当前角度 vs 目标角度    Kp=%.0f  Ki=%.0f  Kd=%.0f  dt=%.3f s"
+                    % (Kp_th, Ki_th, Kd_th, timestep))
 
     ax[1].plot(t, err, color="#2ca02c", lw=1.4, label="误差 theta - theta_ref (折到 +-pi)")
     ax[1].axhline(0.0, color="k", lw=0.8)
@@ -157,6 +172,7 @@ def main():
     d = mujoco.MjData(m)
     mujoco.mj_resetDataKeyframe(m, d, 0)  # 重置到 down 关键帧。
     d.qpos[0] = 0  # 从竖直下垂位置开始。
+    integral_error = 0.0
 
     log = {"t": [], "th": [], "thd": [], "u": []}
 
@@ -167,7 +183,7 @@ def main():
         with mj_viewer.launch_passive(m, d) as v:
             t0 = time.perf_counter()
             while v.is_running() and d.time < args.seconds:
-                policy(m, d)
+                integral_error = policy(m, d, integral_error)
                 mujoco.mj_step(m, d)
                 record(log, d)
                 if (slack := d.time - (time.perf_counter() - t0)) > 0:
@@ -175,7 +191,7 @@ def main():
                 v.sync()
     else:
         while d.time < args.seconds:
-            policy(m, d)
+            integral_error = policy(m, d, integral_error)
             mujoco.mj_step(m, d)
             record(log, d)
 
@@ -183,6 +199,7 @@ def main():
     umax = float(m.actuator_ctrlrange[0, 1])
 
     print(f"t={d.time:.1f}s  th={d.qpos[0]:+.5f}  thd={d.qvel[0]:+.5f}  ctrl={d.ctrl[0]:+.2f}")
+    print(f"积分项: {Ki_th * integral_error:+.3f} N*m")
     print(f"角度误差: 末值 {abs(err[-1]):.5f} rad, 最大 {np.abs(err).max():.4f} rad, "
           f"平均 {np.abs(err).mean():.5f} rad")
     print(f"控制量 u: 峰值 {np.abs(u).max():.1f} N*m, "
