@@ -1,0 +1,60 @@
+<!--
+  Acrobot：两节平面摆杆，肩关节无驱动，仅肘关节有力矩马达。
+
+  qpos = [shoulder, elbow]       qvel = [shoulder_v, elbow_v]
+  ctrl[0] = 肘关节力矩 [N·m]，范围 [-2, 2]
+  两个关节均为相对角度：shoulder=0、elbow=0 时两杆下垂；
+  shoulder=pi、elbow=0 时两杆直立。适合在直立点附近练习 LQR，
+  从下垂位置摆起则需要额外的摆起控制策略。
+-->
+<mujoco model="acrobot">
+  <compiler angle="radian"/>
+  <option timestep="0.01" integrator="implicitfast" gravity="0 0 -9.81">
+    <flag energy="enable"/>
+  </option>
+
+  <default>
+    <!-- 不考虑杆间或地面碰撞，便于在平衡点附近线性化。 -->
+    <geom type="capsule" size="0.02" contype="0" conaffinity="0"/>
+    <joint damping="0.01"/>
+  </default>
+
+  <worldbody>
+    <light pos="0 -2 3" dir="0 1 -1"/>
+    <geom name="floor" type="plane" pos="0 0 -0.2" size="3 3 0.1"
+          rgba=".25 .30 .35 1"/>
+    <geom name="mount" type="box" pos="0 0 1.3" size="0.04 0.04 0.04"
+          rgba=".55 .55 .75 1"/>
+
+    <body name="upper_link" pos="0 0 1.3">
+      <joint name="shoulder" type="hinge" axis="0 1 0"/>
+      <!-- 沿转轴方向伸出的浅色轴销，标出无驱动的肩关节。 -->
+      <geom name="shoulder_pin" type="cylinder"
+            fromto="0 -0.055 0 0 0.055 0" size="0.045" mass="0"
+            rgba=".85 .86 .92 1"/>
+      <geom name="upper_rod" fromto="0 0 0 0 0 -0.5" mass="0.30"
+            rgba="0 .72 .72 1"/>
+
+      <body name="lower_link" pos="0 0 -0.5">
+        <joint name="elbow" type="hinge" axis="0 1 0"/>
+        <!-- 黄色轴销标出有力矩马达的肘关节。 -->
+        <geom name="elbow_pin" type="cylinder"
+              fromto="0 -0.055 0 0 0.055 0" size="0.045" mass="0"
+              rgba="1 .82 .16 1"/>
+        <geom name="lower_rod" fromto="0 0 0 0 0 -0.5" mass="0.30"
+              rgba=".95 .5 .05 1"/>
+        <site name="tip" pos="0 0 -0.5" size="0.02"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="elbow_torque" joint="elbow" gear="1"
+           ctrllimited="true" ctrlrange="-2 2"/>
+  </actuator>
+
+  <keyframe>
+    <key name="down" qpos="0 0" qvel="0 0" ctrl="0"/>
+    <key name="upright" qpos="3.141592653589793 0" qvel="0 0" ctrl="0"/>
+  </keyframe>
+</mujoco>
