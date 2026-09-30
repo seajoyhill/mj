@@ -30,7 +30,7 @@ from pathlib import Path
 import mujoco
 import numpy as np
 
-Kp_th, Ki_th, Kd_th = 20.0, 2.0, 1.0
+Kp_th, Ki_th, Kd_th = 20.0, 20.0, 1.0
 TH_REF = 1.57  # 目标角度，单位为弧度；1.57 约为水平位置。
 
 
